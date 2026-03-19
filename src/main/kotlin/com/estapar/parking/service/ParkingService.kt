@@ -28,7 +28,7 @@ class ParkingService(
             "ENTRY" -> handleEntry(
                 Vehicle(
                     licensePlate = dto.license_plate,
-                    sector = "A",
+                    sector = dto.sector,
                     entryTime = dto.entry_time
                 )
             )
