@@ -20,6 +20,7 @@ class DataLoader(
 
     @PostConstruct
     fun loadGarageData() {
+        try {
         val url = "http://localhost:3000/garage"
         val response = restTemplate.getForObject(url, GarageResponseDTO::class.java)
 
@@ -47,5 +48,9 @@ class DataLoader(
             }
             println("Dados carregados com sucesso!")
         }
+        } catch (e: Exception) {
+            println("Não Carregou os dados: ${e.message}")
+        }
+
     }
 }
