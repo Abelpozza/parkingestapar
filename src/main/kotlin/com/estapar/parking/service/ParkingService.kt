@@ -1,17 +1,16 @@
 package com.estapar.parking.service
 
+import com.estapar.parking.dto.WebhookEventDTO
+import com.estapar.parking.model.Revenue
+import com.estapar.parking.model.Vehicle
 import com.estapar.parking.repository.GarageRepository
 import com.estapar.parking.repository.RevenueRepository
 import com.estapar.parking.repository.SpotRepository
 import com.estapar.parking.repository.VehicleRepository
 import com.estapar.parking.util.calculatePrice
-import com.estapar.parking.dto.WebhookEventDTO
-import com.estapar.parking.model.Revenue
-import com.estapar.parking.model.Vehicle
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.time.Duration
-import java.time.LocalDateTime
 import kotlin.math.ceil
 
 @Service
@@ -24,69 +23,67 @@ class ParkingService(
 
     fun processEvent(dto: WebhookEventDTO) {
         when (dto.event_type) {
-
-            "ENTRY" -> handleEntry(
-                Vehicle(
-                    licensePlate = dto.license_plate,
-                    sector = dto.sector,
-                    entryTime = dto.entry_time
-                )
-            )
-
-            "EXIT" -> handleExit(
-                Vehicle(
-                    licensePlate = dto.license_plate,
-                    sector = "A",
-                    entryTime = dto.entry_time
-                ),
-                dto.exit_time!!
-            )
-
-            "PARKED" -> {
-                println("Carro estacionado: ${dto.license_plate}")
-            }
+            "ENTRY" -> handleEntry(dto)
+            "EXIT" -> handleExit(dto)
+            "PARKED" -> handleParked(dto)
+            else -> throw RuntimeException("Tipo de evento inválido: ${dto.event_type}")
         }
     }
 
     @Transactional
-    fun handleEntry(vehicle: Vehicle) {
-        val garage = garageRepo.findById(vehicle.sector).orElseThrow()
-        val freeSpots = spotRepo.findBySectorAndOccupied(vehicle.sector, false)
+    fun handleEntry(dto: WebhookEventDTO) {
+        val freeSpot = spotRepo.findByOccupied(false).firstOrNull()
+            ?: throw RuntimeException("Estacionamento cheio")
 
-        if (freeSpots.isEmpty()) {
-            throw RuntimeException("Setor cheio")
-        }
+        val garage = garageRepo.findById(freeSpot.sector)
+            .orElseThrow { RuntimeException("Setor ${freeSpot.sector} não encontrado") }
 
-        val occupancyRate = 1 - freeSpots.size.toDouble() / garage.maxCapacity
+        val freeSpotsInSector = spotRepo.findBySectorAndOccupied(freeSpot.sector, false)
+
+        val occupancyRate = 1 - freeSpotsInSector.size.toDouble() / garage.maxCapacity
         val price = calculatePrice(garage.basePrice, occupancyRate)
 
-        val spot = freeSpots.first()
-        spot.occupied = true
-        spotRepo.save(spot)
+        freeSpot.occupied = true
+        spotRepo.save(freeSpot)
 
-        vehicle.price = price
+        val vehicle = Vehicle(
+            licensePlate = dto.license_plate,
+            sector = freeSpot.sector,
+            entryTime = dto.entry_time,
+            price = price
+        )
+
         vehicleRepo.save(vehicle)
     }
 
     @Transactional
-    fun handleExit(vehicle: Vehicle, exitTime: LocalDateTime) {
+    fun handleExit(dto: WebhookEventDTO) {
+        val vehicle = vehicleRepo.findById(dto.license_plate)
+            .orElseThrow { RuntimeException("Veículo não encontrado: ${dto.license_plate}") }
+
         val spot = spotRepo.findBySectorAndOccupied(vehicle.sector, true)
-            .firstOrNull() ?: return
+            .firstOrNull()
+            ?: throw RuntimeException("Nenhuma vaga ocupada encontrada no setor ${vehicle.sector}")
 
         spot.occupied = false
         spotRepo.save(spot)
 
-        val entryTime = vehicle.entryTime ?: return
+        val exitTime = dto.exit_time
+            ?: throw RuntimeException("exit_time é obrigatório para EXIT")
+
+        val entryTime = vehicle.entryTime
+            ?: throw RuntimeException("entry_time do veículo não encontrado")
+
         val durationMinutes = Duration.between(entryTime, exitTime).toMinutes()
 
-        val price = if (durationMinutes <= 30) {
+        val finalPrice = if (durationMinutes <= 30) {
             0.0
         } else {
             ceil(durationMinutes / 60.0) * (vehicle.price ?: 0.0)
         }
 
         vehicle.exitTime = exitTime
-        vehicle.price = price
+        vehicle.price = finalPrice
         vehicleRepo.save(vehicle)
 
         val date = exitTime.toLocalDate()
@@ -98,7 +95,11 @@ class ParkingService(
                 amount = 0.0
             )
 
-        revenue.amount += price
+        revenue.amount += finalPrice
         revenueRepo.save(revenue)
+    }
+
+    fun handleParked(dto: WebhookEventDTO) {
+        println("Carro estacionado: ${dto.license_plate} em lat=${dto.lat}, lng=${dto.lng}")
     }
 }

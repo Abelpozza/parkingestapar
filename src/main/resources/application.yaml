@@ -11,4 +11,4 @@ spring:
     properties:
       hibernate.format_sql: true
 server:
-  port: 8085
+  port: 3003
