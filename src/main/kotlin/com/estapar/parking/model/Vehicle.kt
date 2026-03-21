@@ -10,5 +10,6 @@ data class Vehicle(
     val sector: String = "",
     val entryTime: LocalDateTime? = null,
     var exitTime: LocalDateTime? = null,
-    var price: Double? = null
+    var price: Double? = null,
+    val spotId: Long? = null
 )

@@ -32,25 +32,24 @@ class ParkingService(
 
     @Transactional
     fun handleEntry(dto: WebhookEventDTO) {
+        val entrytime = dto.entry_time
+            ?: throw RuntimeException("entry_time é obrigatório")
         val freeSpot = spotRepo.findByOccupied(false).firstOrNull()
-            ?: throw RuntimeException("Estacionamento cheio")
-
+            ?: throw RuntimeException("Estacionamento Lotado!")
         val garage = garageRepo.findById(freeSpot.sector)
             .orElseThrow { RuntimeException("Setor ${freeSpot.sector} não encontrado") }
-
         val freeSpotsInSector = spotRepo.findBySectorAndOccupied(freeSpot.sector, false)
-
         val occupancyRate = 1 - freeSpotsInSector.size.toDouble() / garage.maxCapacity
         val price = calculatePrice(garage.basePrice, occupancyRate)
 
         freeSpot.occupied = true
         spotRepo.save(freeSpot)
-
         val vehicle = Vehicle(
             licensePlate = dto.license_plate,
             sector = freeSpot.sector,
             entryTime = dto.entry_time,
-            price = price
+            price = price,
+            spotId = freeSpot.id
         )
 
         vehicleRepo.save(vehicle)
@@ -60,44 +59,44 @@ class ParkingService(
     fun handleExit(dto: WebhookEventDTO) {
         val vehicle = vehicleRepo.findById(dto.license_plate)
             .orElseThrow { RuntimeException("Veículo não encontrado: ${dto.license_plate}") }
+        val spotId = vehicle.spotId
+            ?: throw RuntimeException("Veículo ${vehicle.licensePlate} não possui vaga vinculada")
+        val spot = spotRepo.findById(spotId)
+            .orElseThrow {
+                RuntimeException("Nenhuma vaga ocupada encontrada no setor ${vehicle.sector}")
+            }
 
-        val spot = spotRepo.findBySectorAndOccupied(vehicle.sector, true)
-            .firstOrNull()
-            ?: throw RuntimeException("Nenhuma vaga ocupada encontrada no setor ${vehicle.sector}")
+                spot.occupied = false
+                spotRepo.save(spot)
 
-        spot.occupied = false
-        spotRepo.save(spot)
+                val exitTime = dto.exit_time
+                    ?: throw RuntimeException("exit_time é obrigatório para EXIT")
+                val entryTime = vehicle.entryTime
+                    ?: throw RuntimeException("entry_time do veículo não encontrado")
+                val durationMinutes = Duration.between(entryTime, exitTime).toMinutes()
+                val finalPrice = if (durationMinutes <= 30) {
+                    0.0
+                } else {
+                    ceil(durationMinutes / 60.0) * (vehicle.price ?: 0.0)
+                }
 
-        val exitTime = dto.exit_time
-            ?: throw RuntimeException("exit_time é obrigatório para EXIT")
+                vehicle.exitTime = exitTime
+                vehicle.price = finalPrice
+                vehicleRepo.save(vehicle)
 
-        val entryTime = vehicle.entryTime
-            ?: throw RuntimeException("entry_time do veículo não encontrado")
+                val date = exitTime.toLocalDate()
 
-        val durationMinutes = Duration.between(entryTime, exitTime).toMinutes()
+                val revenue = revenueRepo.findBySectorAndDate(vehicle.sector, date)
+                    ?: Revenue(
+                        sector = vehicle.sector,
+                        date = date,
+                        amount = 0.0
+                    )
 
-        val finalPrice = if (durationMinutes <= 30) {
-            0.0
-        } else {
-            ceil(durationMinutes / 60.0) * (vehicle.price ?: 0.0)
-        }
+                revenue.amount += finalPrice
+                revenueRepo.save(revenue)
+            }
 
-        vehicle.exitTime = exitTime
-        vehicle.price = finalPrice
-        vehicleRepo.save(vehicle)
-
-        val date = exitTime.toLocalDate()
-
-        val revenue = revenueRepo.findBySectorAndDate(vehicle.sector, date)
-            ?: Revenue(
-                sector = vehicle.sector,
-                date = date,
-                amount = 0.0
-            )
-
-        revenue.amount += finalPrice
-        revenueRepo.save(revenue)
-    }
 
     fun handleParked(dto: WebhookEventDTO) {
         println("Carro estacionado: ${dto.license_plate} em lat=${dto.lat}, lng=${dto.lng}")
