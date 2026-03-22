@@ -1,6 +1,6 @@
 package com.estapar.parking.controller
 
-import com.estapar.parking.dto.RevenueRequestDTO
+
 import com.estapar.parking.dto.RevenueResponseDTO
 import com.estapar.parking.repository.RevenueRepository
 import org.springframework.web.bind.annotation.GetMapping
@@ -21,12 +21,10 @@ class RevenueController(
         @RequestParam date: String,
         @RequestParam sector: String):
             RevenueResponseDTO {
-            val parsedDate = LocalDate.parse(date)
-        val revenue = revenueRepo.findBySectorAndDate(sector, parsedDate)
+        val revenue = revenueRepo.findBySectorAndDate(sector, LocalDate.parse(date))
         return RevenueResponseDTO(
             amount = revenue?.amount?: 0.0,
-            currency = "BRL",
-            timestamp = LocalDateTime.now().toString()
+            timestamp = "${date}T00:00:00.000Z"
         )
         }
 }
