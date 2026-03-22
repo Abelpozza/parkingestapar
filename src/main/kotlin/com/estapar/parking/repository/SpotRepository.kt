@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository
 interface SpotRepository : JpaRepository<Spot, Long> {
     fun findBySectorAndOccupied(sector: String, occupied: Boolean): List<Spot>
     fun findByOccupied(occupied: Boolean): List<Spot>
+    fun findByLatAndLng(lat: Double, lng: Double): Spot?
 }

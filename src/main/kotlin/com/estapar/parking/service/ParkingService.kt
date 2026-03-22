@@ -99,6 +99,14 @@ class ParkingService(
 
 
     fun handleParked(dto: WebhookEventDTO) {
-        println("Carro estacionado: ${dto.license_plate} em lat=${dto.lat}, lng=${dto.lng}")
+        val vehicle = vehicleRepo.findById(dto.license_plate)
+            .orElseThrow{ RuntimeException("Veículo não encontrado: ${dto.license_plate}")}
+        val lat = dto.lat?: throw RuntimeException("lat é obrigatório para PARKED")
+        val lng = dto.lng?: throw RuntimeException("lng é obrigatório para PARKED")
+        val spot = spotRepo.findByLatAndLng(lat, lng)
+            ?: throw RuntimeException("Vaga não encontrada para lat=$lat e lng=$lng")
+        vehicle.spotId = spot.id
+        vehicle.sector = spot.sector
+        vehicleRepo.save(vehicle)
     }
 }

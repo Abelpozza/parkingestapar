@@ -7,9 +7,9 @@ import java.time.LocalDateTime
 data class Vehicle(
     @Id
     val licensePlate: String = "",
-    val sector: String = "",
+    var sector: String = "",
     val entryTime: LocalDateTime? = null,
     var exitTime: LocalDateTime? = null,
     var price: Double? = null,
-    val spotId: Long? = null
+    var spotId: Long? = null
 )
