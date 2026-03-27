@@ -59,7 +59,7 @@ Deve retornar:
 
 --------------------------------------------------------------------------------
 
-Parking API - Teste Estapar
+Parking API 
 
 Projeto backend feito em Kotlin + Spring Boot para gestão do estacionamento.
 
